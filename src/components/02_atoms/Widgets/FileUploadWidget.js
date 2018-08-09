@@ -50,22 +50,39 @@ const FileUploadWidget = ({
   entityTypeId,
   schema: { properties, maxItems },
 }) => {
-  // Filter out empty values.
-  const filteredData = Object.entries(value.data)
-    .filter(([, value2]) => value2.file && value2.file.id)
-    .reduce(
-      (agg, [key, value2]) => ({
-        ...agg,
-        [key]: value2,
-      }),
-      {},
-    );
-  const length =
-    (value && filteredData && Object.keys(filteredData).length) || 0;
   // If array then allow for multiple uploads.
   const multiple = properties.data.type === 'array';
+  // Filter out empty values and (if array) object-ize array for ease of selection.
+  const filteredData = multiple === true && value.data.length > 0
+    ? (
+      value.data
+      //.filter(([, value2]) => value2.file && value2.file.id)
+        .reduce(
+          (agg, obj) => ({
+            ...agg,
+            [obj.id]: obj,
+          }),
+          {},
+        )
+      )
+    : (
+      Object.entries(value.data)
+      //.filter(([, value2]) => value2..id)
+        .reduce(
+          (agg, obj) => ({
+            ...agg,
+            [obj.id]: obj,
+          }),
+          {},
+        )
+      );
+  const length =
+    (value && filteredData && Object.keys(filteredData).length) || 0;
   // maxItems is only set if array, so set to 1 as default.
   const maxItemsCount = multiple ? maxItems || 100000000000 : 1;
+  if (filteredData) {
+    console.log(filteredData);
+  }
 
   return (
     <FormControl margin="normal">
@@ -87,24 +104,20 @@ const FileUploadWidget = ({
             entityTypeId={entityTypeId}
             remainingUploads={maxItemsCount - length}
             onFileUpload={files => {
-              const data = files.reduce((arr, file) => {
-                arr[file.uuid[0].value] = {
-                  file: {
-                    type: 'file--file',
-                    url: file.url[0].value,
-                    id: file.uuid[0].value,
-                    filename: file.filename[0].value,
-                  },
+              const dataSchematized = files.map((file) => {
+                return {
+                  type: 'file--file',
+                  url: file.url[0].value,
+                  id: file.uuid[0].value,
+                  filename: file.filename[0].value,
                   meta: { alt: '' },
                 };
-                return arr;
-              }, {});
+              });
+              const data =
+                multiple === true ? dataSchematized : dataSchematized[0];
 
               onChange({
-                data: {
-                  ...value.data,
-                  ...data,
-                },
+                data: data,
               });
             }}
           />
@@ -115,11 +128,13 @@ const FileUploadWidget = ({
             <Card>
               <CardContent>
                 <List>
-                  {Object.keys(filteredData).map((key, index) => {
+                  {
+                    Object.keys(filteredData).map((key, index) => {
                     const {
                       meta: { alt },
-                      file: { url, filename },
-                    } = value.data[key];
+                      url,
+                      filename,
+                    } = filteredData[key];
                     const last = Object.keys(value.data).length - 1 === index;
 
                     return (
@@ -190,19 +205,10 @@ const FileUploadWidget = ({
 
 FileUploadWidget.propTypes = {
   ...WidgetPropTypes,
-  value: PropTypes.shape({
-    data: PropTypes.shape({
-      file: PropTypes.shape({
-        type: PropTypes.string.isRequired,
-        url: PropTypes.string.isRequired,
-        id: PropTypes.string.isRequired,
-        filename: PropTypes.string.isRequired,
-      }),
-    }),
-    meta: PropTypes.shape({
-      alt: PropTypes.string,
-    }),
-  }),
+  value: PropTypes.oneOfType([
+    PropTypes.array,
+    PropTypes.object,
+  ]).isRequired,
   inputProps: PropTypes.shape({
     file_extensions: PropTypes.string,
     max_filesize: PropTypes.string,
